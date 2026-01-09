@@ -20,43 +20,6 @@
                 </button>
             </div>
 
-            <!-- Settings Panel -->
-            <div id="settingsPanel" class="settings-panel">
-                <h3 style="color: white; margin-bottom: 15px;">API Configuration</h3>
-                
-                <div class="form-group">
-                    <label>Provider</label>
-                    <select id="provider" onchange="providerChanged()">
-                        <option value="groq">⚡ Groq (Recommended)</option>
-                        <option value="gemini">🔷 Google Gemini</option>
-                        <option value="openai">🤖 OpenAI</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>API Key</label>
-                    <div style="position: relative;">
-                        <input type="password" id="apiKey" placeholder="Enter your API key" style="padding-right: 45px;">
-                        <button type="button" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.2em; opacity: 0.6; color: white;">
-                            <span id="eyeIcon">👁️</span>
-                        </button>
-                    </div>
-                    <div class="help-text" id="helpText">Get your free key at console.groq.com</div>
-                </div>
-
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-top: 20px;">
-                        <input type="checkbox" id="useAI" checked style="width: auto; transform: scale(1.3);">
-                        <span>Use AI for high-quality translation</span>
-                    </label>
-                    <div class="help-text">
-                        Uncheck to use fast Google Translate (free, unlimited, no API key needed)
-                    </div>
-                </div>
-
-                <button class="btn-primary btn-success" onclick="saveApiKey()">Save Settings</button>
-            </div>
-
             <!-- Step 1: Upload File -->
             <div class="section">
                 <div class="section-title">
@@ -139,8 +102,12 @@
 
             <!-- Progress Bar -->
             <div id="progressContainer" class="hidden">
+                <div class="progress-text">
+                    <span id="progressPercent">0%</span>
+                    <span id="progressStatus">Đang xử lý...</span>
+                </div>
                 <div class="progress-bar">
-                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    <div id="progressFill"></div>
                 </div>
             </div>
 
@@ -155,6 +122,50 @@
 
             <!-- Status -->
             <div id="status" class="status hidden"></div>
+        </div>
+
+        <!-- Settings Modal (outside card) -->
+        <div id="settingsModal" class="settings-modal">
+            <div class="settings-modal-content">
+                <div class="settings-header">
+                    <h3>⚙️ API Configuration</h3>
+                    <button class="close-btn" onclick="toggleSettings()">✕</button>
+                </div>
+
+                <div class="settings-body">
+                    <div class="form-group">
+                        <label>Provider</label>
+                        <select id="provider" onchange="providerChanged()">
+                            <option value="groq">⚡ Groq (Recommended)</option>
+                            <option value="gemini">🔷 Google Gemini</option>
+                            <option value="openai">🤖 OpenAI</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <div style="position: relative;">
+                            <input type="password" id="apiKey" placeholder="Enter your API key" style="padding-right: 45px;">
+                            <button type="button" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.2em; opacity: 0.6; color: white;">
+                                <span id="eyeIcon">👁️</span>
+                            </button>
+                        </div>
+                        <div class="help-text" id="helpText">Get your free key at console.groq.com</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-top: 20px;">
+                            <input type="checkbox" id="useAI" checked style="width: auto; transform: scale(1.3);">
+                            <span>Use AI for high-quality translation</span>
+                        </label>
+                        <div class="help-text">
+                            Uncheck to use fast Google Translate (free, unlimited, no API key needed)
+                        </div>
+                    </div>
+
+                    <button class="btn-primary btn-success" onclick="saveApiKey()">Save Settings</button>
+                </div>
+            </div>
         </div>
 
         <div class="footer">
