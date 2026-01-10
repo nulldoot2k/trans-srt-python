@@ -2,20 +2,64 @@ version: '3.9'
 
 services:
   trans-srt:
-    # image: 
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: trans-srt
+    image: vumanhdat2k/translator-srt:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: srt-translator
     ports:
       - "5000:5000"
-    volumes:
-      - .:/app
     env_file:
       - .env
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     command: python app.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - translator_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: srt-redis
+    restart: unless-stopped
+    ports:
+      - "6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - translator_network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    restart: unless-stopped
     environment:
-      - FLASK_ENV=production
-      - PYTHONUNBUFFERED=1
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=${REDIS_COMMANDER_USER:-admin}
+      - HTTP_PASSWORD=${REDIS_COMMANDER_PASSWORD:-admin123}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - translator_network
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  translator_network:
+    driver: bridge
