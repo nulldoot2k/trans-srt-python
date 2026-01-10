@@ -1,4 +1,4 @@
-/* statis/style.css - Updated with disabled states */
+/* statis/style.css - Updated with Progress Bar Animations */
 * {
     margin: 0;
     padding: 0;
@@ -274,32 +274,129 @@ select {
     box-shadow: 0 10px 30px rgba(17, 153, 142, 0.4);
 }
 
+/* ========== PROGRESS BAR STYLES - ENHANCED ========== */
+#progressContainer {
+    margin-top: 25px;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: opacity 0.5s ease;
+}
+
 .progress-text {
-    color: #ccc;
-    font-size: 14px;
-    margin-bottom: 6px;
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 10px;
+}
+
+#progressPercent {
+    font-weight: 700;
+    font-size: 1.2em;
+    color: #fff;
+    min-width: 50px;
+    text-align: left;
+}
+
+#progressStatus {
+    flex: 1;
+    text-align: right;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9em;
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .progress-bar {
-    height: 8px;
-    background: #333;
-    border-radius: 4px;
-    overflow: hidden;
+    height: 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    overflow: visible; /* Changed from hidden để debug */
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+    position: relative;
 }
 
 #progressFill {
-    height: 100%;
+    display: block !important; /* Force display */
+    height: 100% !important;
+    min-height: 12px !important; /* Backup height */
     width: 0%;
-    background: #4caf50;
-    transition: width 0.4s ease;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    transition: width 0.3s ease-out, background 0.5s ease;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+}
+
+#progressFill.pulse {
+    animation: pulseGlow 1.8s infinite ease-in-out;
+}
+
+/* Shimmer effect khi đang chạy */
+#progressFill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shimmer 2s infinite;
 }
 
 @keyframes shimmer {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
 }
+
+/* Pulse animation cho progress bar khi đang chạy */
+#progressFill:not(.complete) {
+    animation: progressPulse 2s infinite;
+}
+
+@keyframes progressPulse {
+    0%, 100% { 
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+    }
+    50% { 
+        box-shadow: 0 2px 15px rgba(102, 126, 234, 0.8);
+    }
+}
+
+/* Success state */
+#progressFill.complete {
+    background: linear-gradient(90deg, #00ff9d, #00c6ff) !important;
+    box-shadow: 0 2px 20px rgba(0, 255, 157, 0.9) !important;
+    animation: successGlow 0.8s ease-out !important;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 8px rgba(102, 126, 234, 0.6); }
+    50%      { box-shadow: 0 0 20px rgba(102, 126, 234, 1); }
+}
+
+@keyframes successGlow {
+    0% {
+        box-shadow: 0 2px 8px rgba(0, 255, 157, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(0, 255, 157, 0.8);
+    }
+    100% {
+        box-shadow: 0 2px 12px rgba(0, 255, 157, 0.5);
+    }
+}
+
+/* ========== END PROGRESS BAR ========== */
 
 .status {
     text-align: center;
@@ -492,6 +589,10 @@ input[type="file"] {
     
     .upload-area {
         padding: 40px 15px;
+    }
+    
+    #progressStatus {
+        font-size: 0.8em;
     }
 }
 

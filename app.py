@@ -1,4 +1,4 @@
-# app.py - PHIÊN BẢN HOÀN CHỈNH & ỔN ĐỊNH (SRT Translator - 2026)
+# app.py
 
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_limiter import Limiter
@@ -16,6 +16,34 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import random
 import threading
+import atexit
+from datetime import datetime, timedelta
+
+# Language mapping for Google Translate
+lang_map = {
+    'auto': 'auto',
+    'en': 'en',
+    'vi': 'vi',
+    'zh': 'zh-CN',
+    'zh-cn': 'zh-CN',
+    'zh-tw': 'zh-TW',
+    'ja': 'ja',
+    'ko': 'ko',
+    'th': 'th',
+    'fr': 'fr',
+    'de': 'de',
+    'es': 'es',
+    'pt': 'pt',
+    'ru': 'ru',
+    'ar': 'ar',
+    'hi': 'hi',
+    'id': 'id',
+    'it': 'it',
+    'nl': 'nl',
+    'pl': 'pl',
+    'tr': 'tr',
+    'uk': 'uk',
+}
 
 # Setup logging
 logging.basicConfig(
@@ -60,7 +88,6 @@ current_mode = "Google Free"
 total_subtitles = 0
 processed_subtitles = 0
 
-# Rotate User-Agents để tránh bị Google block
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -178,13 +205,12 @@ def translate():
     global current_progress, current_mode, total_subtitles, processed_subtitles
     
     with progress_lock:
-        current_progress = 0  # Reset progress
+        current_progress = 0
         current_mode = "Google Free"
         total_subtitles = 0
         processed_subtitles = 0
 
-    temp_file_path = None
-    subtitles = []  # Khai báo default để tránh UnboundLocalError nếu exception trước assignment
+    subtitles = []
 
     try:
         file = request.files.get('file')
@@ -200,12 +226,10 @@ def translate():
             return jsonify({'error': 'Only .srt files are allowed'}), 400
 
         content = file.read().decode('utf-8')
-
         subtitles = parse_srt(content)
 
         if not subtitles:
             return jsonify({'error': 'No valid subtitles found'}), 400
-
         if len(subtitles) > 50000:
             return jsonify({'error': 'Too many subtitle entries (max 50000)'}), 400
 
@@ -216,21 +240,20 @@ def translate():
         processed_subtitles = 0
 
         translated_subs = translate_subtitles(subtitles, source_lang, target_lang, provider, api_key, use_ai)
-
         translated_content = build_srt(translated_subs)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.srt') as temp_file:
-            temp_file.write(translated_content.encode('utf-8'))
-            temp_file_path = temp_file.name
+        # Tạo file temp KHÔNG tự xóa
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.srt', dir=tempfile.gettempdir())
+        temp_file.write(translated_content.encode('utf-8'))
+        temp_file.close()
 
         original_filename = file.filename.rsplit('.', 1)[0]
         translated_filename = f"{original_filename}_{target_lang}.srt"
-
         preview_lines = '\n'.join([sub['translated'] for sub in translated_subs[:5]])
 
         return jsonify({
             'preview': preview_lines,
-            'file_path': os.path.basename(temp_file_path),
+            'file_path': os.path.basename(temp_file.name),  # ← SỬA: temp_file.name thay vì temp_file_path
             'filename': translated_filename
         })
 
@@ -238,15 +261,12 @@ def translate():
         logger.error(f"Translation error: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
-
 @app.route('/download/<path:file_path>', methods=['GET'])
 def download(file_path):
     try:
         full_path = os.path.join(tempfile.gettempdir(), file_path)
         if not os.path.exists(full_path):
+            logger.error(f"File not found: {full_path}")
             return jsonify({'error': 'File not found'}), 404
 
         filename = request.args.get('filename', 'translated.srt')
@@ -257,11 +277,15 @@ def download(file_path):
     except Exception as e:
         logger.error(f"Download error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+        
     finally:
+        # ✅ Xóa file SAU KHI download xong
         try:
-            os.unlink(full_path)
-        except:
-            pass
+            if os.path.exists(full_path):
+                os.unlink(full_path)
+                logger.info(f"Deleted temp file: {full_path}")
+        except Exception as e:
+            logger.warning(f"Failed to delete temp file: {e}")
 
 def parse_srt(content):
     subtitles = []
@@ -295,6 +319,7 @@ def build_srt(subtitles):
     return srt
 
 def google_translate_single(session, text, source_lang, target_lang):
+    """Single translation với timeout ngắn"""
     url = 'https://translate.google.com/translate_a/single'
     params = {
         'client': 'gtx',
@@ -305,40 +330,107 @@ def google_translate_single(session, text, source_lang, target_lang):
         'oe': 'UTF-8',
         'q': text
     }
+    
     try:
-        resp = session.get(url, params=params, timeout=8)
+        # Giảm timeout xuống 5s (đủ cho Google API)
+        resp = session.get(url, params=params, timeout=5)
+        
         if resp.status_code == 200:
             data = resp.json()
-            return ''.join([s[0] for s in data[0] if s[0]]).strip()
+            result = ''.join([s[0] for s in data[0] if s[0]]).strip()
+            return result if result else text  # Trả về gốc nếu kết quả rỗng
+        
+        # Nếu không phải 200, raise exception để retry
+        resp.raise_for_status()
         return text
-    except:
-        return text
+        
+    except requests.exceptions.Timeout:
+        raise  # Propagate để retry
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Request error: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Parse error: {e}")
+        return text  # Fallback to original nếu parse lỗi
 
-def translate_with_google_smart(texts, source_lang, target_lang):
+def translate_with_google_parallel(texts, source_lang, target_lang, max_workers=25):
+    """
+    Dịch song song với Google Translate - OPTIMIZED VERSION
+    max_workers: 20-30 cho tốc độ tối đa
+    """
     global current_progress, processed_subtitles
     
     total = len(texts)
-    translations = [text for text in texts]  # default là gốc
-    session = requests.Session()
-    session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+    translations = [""] * total
+    processed_subtitles = 0
+    failed_indices = []  # Track failed translations
     
-    success = 0
-    for i in range(0, total, 5):  # Giảm xuống 5 dòng/lần để ít bị block
-        batch = texts[i:i+5]
-        for idx, text in enumerate(batch, start=i):
+    def translate_single_with_retry(index, text):
+        """Dịch 1 dòng với adaptive retry"""
+        session = requests.Session()
+        session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
                 translated = google_translate_single(session, text, source_lang, target_lang)
-                if translated != text and len(translated) > 0:  # Kiểm tra có thay đổi không
-                    translations[idx] = translated
-                    success += 1
-                processed_subtitles += 1
+                
+                # Update progress thread-safe
                 with progress_lock:
+                    global processed_subtitles
+                    processed_subtitles += 1
                     current_progress = int((processed_subtitles / total) * 100)
-                time.sleep(random.uniform(3.0, 7.0))  # Tăng delay lên 3–7 giây
+                
+                # GIẢM DELAY - chỉ cần ngăn burst
+                time.sleep(random.uniform(0.05, 0.15))  # CHỈ 50-150ms!
+                return index, translated, True
+                
+            except requests.exceptions.Timeout:
+                logger.warning(f"Timeout at line {index+1}, retry {attempt+1}")
+                time.sleep(random.uniform(0.5, 1.0))
+                
             except Exception as e:
-                logger.warning(f"Google fail line {idx+1}: {e}")
+                error_msg = str(e).lower()
+                
+                # Nếu bị rate limit (429), chờ lâu hơn
+                if '429' in error_msg or 'too many requests' in error_msg:
+                    wait_time = (2 ** attempt) * 3  # Exponential backoff: 3s, 6s, 12s
+                    logger.warning(f"Rate limited at line {index+1}, waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    time.sleep(random.uniform(0.3, 0.8))
+                
+                if attempt == max_retries - 1:
+                    logger.error(f"Failed line {index+1} after {max_retries} retries: {e}")
+                    return index, text, False  # Mark as failed
+        
+        return index, text, False
     
-    logger.info(f"Google success rate: {success}/{total} lines ({success/total*100:.1f}%)")
+    # Chạy song song với nhiều workers
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(translate_single_with_retry, i, text): i 
+            for i, text in enumerate(texts)
+        }
+        
+        for future in as_completed(futures):
+            try:
+                index, translated, success = future.result()
+                translations[index] = translated
+                if not success:
+                    failed_indices.append(index)
+            except Exception as e:
+                index = futures[future]
+                logger.error(f"Thread error at line {index+1}: {e}")
+                translations[index] = texts[index]
+                failed_indices.append(index)
+    
+    success_count = total - len(failed_indices)
+    logger.info(f"Google parallel: {success_count}/{total} success ({success_count/total*100:.1f}%)")
+    
+    if failed_indices:
+        logger.warning(f"Failed lines: {failed_indices[:20]}...")  # Show first 20
+    
     return translations
 
 # ==================== AI BATCH TRANSLATION ====================
@@ -425,16 +517,35 @@ def translate_subtitles(subtitles, source_lang, target_lang, provider, api_key, 
     else:
         # Google Free mode
         texts = [sub['text'] for sub in subtitles]
-        results = translate_with_google_smart(texts, source_lang, target_lang)
+        results = translate_with_google_parallel(texts, source_lang, target_lang, max_workers=10)
         for j, sub in enumerate(subtitles):
             sub['translated'] = results[j]
-            processed_subtitles += 1
-            with progress_lock:
-                current_progress = int((processed_subtitles / total_subtitles) * 100)
+
+        translated = subtitles
     
     with progress_lock:
         current_progress = 100
-    return subtitles  # trả về subtitles đã sửa trực tiếp
+    return subtitles
+
+
+def cleanup_old_temp_files():
+    """Xóa file temp cũ hơn 1 giờ"""
+    temp_dir = tempfile.gettempdir()
+    now = time.time()
+    
+    for filename in os.listdir(temp_dir):
+        if filename.endswith('.srt'):
+            filepath = os.path.join(temp_dir, filename)
+            try:
+                # Xóa file cũ hơn 1 giờ
+                if os.path.getmtime(filepath) < now - 3600:
+                    os.unlink(filepath)
+                    logger.info(f"Cleaned up old temp file: {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup {filename}: {e}")
+
+# Chạy cleanup khi app shutdown
+atexit.register(cleanup_old_temp_files)
 
 # ==================== ERROR HANDLERS ====================
 @app.errorhandler(429)

@@ -1,0 +1,21 @@
+version: '3.9'
+
+services:
+  trans-srt:
+    # image: 
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trans-srt
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: python app.py
+
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
